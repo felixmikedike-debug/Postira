@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Postira - Dashboard</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #1564C0;
+      --primary-light: #3485e5;
+      --primary-pale: #eaf2fc;
+      --success: #28a745;
+      --danger: #dc3545;
+      --warning: #f0ad4e;
+      --gray-800: #343a40;
+      --gray-600: #6c757d;
+      --gray-200: #e9ecef;
+      --white: #ffffff;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', 'Poppins', sans-serif;
+      background: #f5f7fa;
+      min-height: 100vh;
+      color: var(--gray-800);
+    }
+
+    a { text-decoration: none; }
+
+    /* ---------- top nav ---------- */
+    .navbar {
+      background: var(--white);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .navbar-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .logo { font-size: 26px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 4px; }
+    .tall-p { font-size: 1.2em; }
+
+    .nav-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+    .quota-pill {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--primary-pale); border-radius: 999px; padding: 8px 16px;
+      font-size: 13px; font-weight: 500; color: var(--primary);
+    }
+    .quota-track { width: 80px; height: 6px; background: #cfe0f7; border-radius: 999px; overflow: hidden; }
+    .quota-fill { height: 100%; background: var(--primary); border-radius: 999px; transition: width .3s; }
+    .quota-fill.warn { background: var(--warning); }
+
+    .icon-btn {
+      width: 40px; height: 40px; border-radius: 50%; border: none;
+      background: var(--gray-200); color: var(--gray-800); font-size: 15px;
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+      transition: background .2s;
+      position: relative;
+    }
+    .icon-btn:hover { background: #dfe3e8; }
+    .icon-btn .dot {
+      position: absolute; top: 4px; right: 4px; width: 9px; height: 9px; border-radius: 50%;
+      background: var(--danger); border: 2px solid var(--white);
+    }
+    .icon-btn .dot.on { background: var(--success); }
+
+    .user-chip { display: flex; align-items: center; gap: 10px; }
+    .avatar {
+      width: 38px; height: 38px; border-radius: 50%; background: var(--primary);
+      color: white; display: flex; align-items: center; justify-content: center;
+      font-weight: 600; font-size: 14px;
+    }
+    .user-name { font-size: 14px; font-weight: 600; line-height: 1.2; }
+    .user-plan { font-size: 11.5px; color: var(--gray-600); }
+
+    .plan-badge {
+      font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+      padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+    }
+    .plan-badge.free { background: var(--gray-200); color: var(--gray-600); }
+    .plan-badge.pro { background: linear-gradient(135deg, #ffe1b0, #ffb648); color: #7a4a00; }
+
+    .btn {
+      padding: 12px 20px; border-radius: 12px; border: none; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all .2s;
+    }
+    .btn-primary { background: var(--primary); color: white; box-shadow: 0 8px 20px rgba(21,100,192,0.25); }
+    .btn-primary:hover { background: var(--primary-light); transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: .65; cursor: not-allowed; transform: none; }
+    .btn-outline { background: white; color: var(--primary); border: 2px solid var(--primary); }
+    .btn-outline:hover { background: var(--primary-pale); }
+    .btn-ghost { background: transparent; color: var(--gray-600); }
+    .btn-ghost:hover { color: var(--gray-800); }
+    .btn-upgrade {
+      background: linear-gradient(135deg, #ffb648, #ff8a3d); color: white;
+      box-shadow: 0 8px 20px rgba(255,138,61,0.3);
+    }
+    .btn-upgrade:hover { transform: translateY(-1px); }
+    .btn-sm { padding: 8px 14px; font-size: 12.5px; border-radius: 10px; }
+    .btn-block { width: 100%; }
+
+    /* ---------- layout ---------- */
+    main { max-width: 1100px; margin: 0 auto; padding: 28px 24px 60px; }
+
+    .layout {
+      display: grid; grid-template-columns: 380px 1fr; gap: 22px; align-items: start;
+    }
+    @media (max-width: 880px) { .layout { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--white); border-radius: 20px; padding: 26px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+    }
+    .card + .card { margin-top: 20px; }
+    .card h3 {
+      font-size: 15px; font-weight: 700; margin-bottom: 18px; display: flex; align-items: center; gap: 8px;
+    }
+    .card h3 i { color: var(--primary); font-size: 14px; }
+
+    /* ---------- form ---------- */
+    .form-group { position: relative; margin-bottom: 18px; }
+    .form-group label {
+      display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 600;
+      color: var(--gray-600); margin-bottom: 7px;
+    }
+    .form-group label .count { font-weight: 400; color: #adb5bd; }
+    .form-group input, .form-group textarea {
+      width: 100%; padding: 13px 16px; border: 2px solid var(--gray-200); border-radius: 12px;
+      font-size: 14px; font-family: inherit; transition: all .2s; resize: vertical;
+    }
+    .form-group input:focus, .form-group textarea:focus {
+      outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(21,100,192,0.08);
+    }
+
+    .orient-group { display: flex; gap: 8px; }
+    .orient-option {
+      flex: 1; text-align: center; padding: 11px 4px; border: 2px solid var(--gray-200); border-radius: 12px;
+      cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--gray-600); transition: all .2s;
+    }
+    .orient-option input { display: none; }
+    .orient-option i { display: block; margin-bottom: 4px; font-size: 15px; }
+    .orient-option.checked { border-color: var(--primary); background: var(--primary-pale); color: var(--primary); }
+
+    /* ---------- preview ---------- */
+    .preview-card { min-height: 480px; display: flex; flex-direction: column; }
+    .preview-stage {
+      flex: 1; border-radius: 16px; background: #f8f9fb; border: 2px dashed var(--gray-200);
+      display: flex; align-items: center; justify-content: center; padding: 24px; min-height: 380px;
+    }
+    .preview-empty { text-align: center; color: #adb5bd; }
+    .preview-empty i { font-size: 42px; margin-bottom: 12px; display: block; }
+    .preview-empty p { font-size: 14px; max-width: 260px; margin: 0 auto; line-height: 1.5; }
+
+    .preview-loading { text-align: center; }
+    .spinner {
+      width: 42px; height: 42px; border: 4px solid var(--gray-200); border-top-color: var(--primary);
+      border-radius: 50%; margin: 0 auto 14px; animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .preview-loading p { font-size: 13.5px; color: var(--gray-600); }
+
+    .preview-result { text-align: center; }
+    .preview-result img {
+      max-width: 100%; max-height: 420px; border-radius: 14px; box-shadow: 0 16px 40px rgba(0,0,0,0.15);
+    }
+    .preview-actions { margin-top: 16px; display: flex; gap: 10px; justify-content: center; }
+
+    /* ---------- history ---------- */
+    .history-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
+    .history-item { border-radius: 12px; overflow: hidden; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: transform .15s; }
+    .history-item:hover { transform: translateY(-3px); }
+    .history-item img { width: 100%; aspect-ratio: 4/5; object-fit: cover; display: block; }
+    .history-empty { color: #adb5bd; font-size: 13.5px; grid-column: 1 / -1; }
+
+    .alert { padding: 12px 16px; border-radius: 12px; font-size: 13.5px; margin-top: 14px; display: none; }
+    .alert.error { background: #fdeceb; color: #a52c22; display: block; }
+    .alert.ok { background: #e9f7ec; color: #1e7a34; display: block; }
+
+    /* ---------- telegram card ---------- */
+    .tg-row { display: flex; align-items: center; gap: 12px; }
+    .tg-icon {
+      width: 42px; height: 42px; border-radius: 12px; background: #e9f4ff; color: #229ED9;
+      display: flex; align-items: center; justify-content: center; font-size: 18px; flex: none;
+    }
+    .tg-status { font-size: 13px; font-weight: 600; }
+    .tg-sub { font-size: 12px; color: var(--gray-600); margin-top: 2px; }
+
+    /* ---------- modal (reused pattern) ---------- */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      display: flex; align-items: center; justify-content: center; z-index: 9999;
+      opacity: 0; visibility: hidden; transition: all .3s ease;
+    }
+    .modal-overlay.show { opacity: 1; visibility: visible; }
+    .modal {
+      background: white; padding: 30px; border-radius: 20px; text-align: center;
+      width: 90%; max-width: 400px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      transform: scale(0.7); transition: transform .4s ease; position: relative;
+    }
+    .modal-overlay.show .modal { transform: scale(1); }
+    .modal-close {
+      position: absolute; top: 12px; right: 16px; background: none; border: none;
+      font-size: 28px; color: #aaa; cursor: pointer;
+    }
+    .modal-close:hover { color: #333; }
+    .modal-icon { font-size: 56px; margin-bottom: 16px; }
+    .modal.success .modal-icon { color: var(--success); }
+    .modal.error .modal-icon { color: var(--danger); }
+    .modal h3 { font-size: 22px; margin-bottom: 12px; }
+    .modal p { color: #666; margin-bottom: 4px; font-size: 15px; }
+
+    @media (max-width: 480px) {
+      .navbar-inner { padding: 14px 16px; }
+      main { padding: 20px 16px 48px; }
+      .card { padding: 20px; }
+    }
+
+    /* ---------- activation banner ---------- */
+    .activate-banner {
+      display: none;
+      align-items: center; gap: 14px; flex-wrap: wrap;
+      background: linear-gradient(135deg, #e9f4ff, #f3f9ff);
+      border-bottom: 1px solid #cfe4f7;
+      padding: 12px 24px;
+    }
+    .activate-banner.show { display: flex; }
+    .activate-banner-inner {
+      max-width: 1100px; margin: 0 auto; width: 100%;
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    }
+    .activate-banner-icon {
+      width: 34px; height: 34px; border-radius: 50%; background: #229ED9; color: #fff;
+      display: flex; align-items: center; justify-content: center; font-size: 15px; flex: none;
+    }
+    .activate-banner-text { flex: 1; min-width: 200px; }
+    .activate-banner-text strong { font-size: 13.5px; }
+    .activate-banner-text span { display: block; font-size: 12.5px; color: var(--gray-600); margin-top: 1px; }
+    .activate-banner-waiting {
+      font-size: 12px; color: var(--gray-600); display: none; align-items: center; gap: 6px;
+    }
+    .activate-banner-waiting.show { display: flex; }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <div class="logo"><span class="tall-p">P</span>ostira</div>
+      <div class="nav-right">
+        <div class="quota-pill" id="quotaPill">
+          <i class="fas fa-bolt"></i>
+          <span id="quotaText">Loading…</span>
+          <div class="quota-track"><div class="quota-fill" id="quotaFill" style="width:0%"></div></div>
+        </div>
+        <button class="icon-btn" id="tgIconBtn" title="Telegram 2FA">
+          <i class="fab fa-telegram-plane"></i>
+          <span class="dot" id="tgDot"></span>
+        </button>
+        <button class="btn btn-upgrade btn-sm" id="upgradeBtn" style="display:none;">
+          <i class="fas fa-crown"></i> Upgrade
+        </button>
+        <div class="user-chip">
+          <div class="avatar" id="avatar">?</div>
+          <div>
+            <div class="user-name" id="userNameLabel">—</div>
+            <div class="user-plan" id="userPlanLabel">—</div>
+          </div>
+          <span class="plan-badge" id="planBadge">—</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="logoutBtn"><i class="fas fa-sign-out-alt"></i></button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="activate-banner" id="activateBanner">
+    <div class="activate-banner-inner">
+      <div class="activate-banner-icon"><i class="fab fa-telegram-plane"></i></div>
+      <div class="activate-banner-text">
+        <strong>Activate your account</strong>
+        <span>Connect Telegram to secure password resets — takes a few seconds.</span>
+      </div>
+      <span class="activate-banner-waiting" id="bannerWaiting">
+        <i class="fas fa-spinner fa-spin"></i> Waiting for confirmation…
+      </span>
+      <a class="btn btn-primary btn-sm" id="bannerConnectBtn" href="#" target="_blank" rel="noopener">
+        <i class="fas fa-link"></i> Connect Telegram
+      </a>
+    </div>
+  </div>
+
+  <main>
+    <div class="layout">
+
+      <!-- LEFT COLUMN -->
+      <div>
+        <div class="card" id="telegramCard">
+          <h3 id="tgCardTitle"><i class="fab fa-telegram-plane"></i> Activate your account</h3>
+          <div class="tg-row">
+            <div class="tg-icon"><i class="fab fa-telegram-plane"></i></div>
+            <div style="flex:1;">
+              <div class="tg-status" id="tgStatusText">Checking…</div>
+              <div class="tg-sub" id="tgSubText">Connect Telegram to unlock poster generation.</div>
+            </div>
+          </div>
+          <div style="margin-top:14px;">
+            <a class="btn btn-outline btn-sm btn-block" id="tgConnectBtn" href="#" target="_blank" rel="noopener" style="display:none; text-align:center;">
+              <i class="fas fa-link"></i> Connect Telegram
+            </a>
+            <button class="btn btn-ghost btn-sm btn-block" id="tgDisconnectBtn" style="display:none;">Disconnect</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3><i class="fas fa-image"></i> Generate a poster</h3>
+          <form id="genForm">
+            <div class="form-group">
+              <label for="query">Photo search <span class="count" id="queryCount">0/100</span></label>
+              <input id="query" type="text" maxlength="100" placeholder="e.g. sneakers on concrete" required>
+            </div>
+            <div class="form-group">
+              <label for="hook">Hook <span class="count" id="hookCount">0/120</span></label>
+              <input id="hook" type="text" maxlength="120" placeholder="e.g. Fresh drops, every Friday" required>
+            </div>
+            <div class="form-group">
+              <label for="copy">Supporting copy <span class="count" id="copyCount">0/220</span></label>
+              <textarea id="copy" maxlength="220" rows="3" placeholder="e.g. Free delivery on orders over ₦20,000"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="cta">Button text <span class="count" id="ctaCount">0/40</span></label>
+              <input id="cta" type="text" maxlength="40" placeholder="Shop now">
+            </div>
+            <div class="form-group">
+              <label>Orientation</label>
+              <div class="orient-group">
+                <label class="orient-option checked" data-o="portrait">
+                  <input type="radio" name="orientation" value="portrait" checked>
+                  <i class="fas fa-mobile-alt"></i>Portrait
+                </label>
+                <label class="orient-option" data-o="landscape">
+                  <input type="radio" name="orientation" value="landscape">
+                  <i class="fas fa-image"></i>Landscape
+                </label>
+                <label class="orient-option" data-o="square">
+                  <input type="radio" name="orientation" value="square">
+                  <i class="far fa-square"></i>Square
+                </label>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" id="generateBtn">
+              <i class="fas fa-wand-magic-sparkles"></i> Generate poster
+            </button>
+            <div class="alert" id="genAlert"></div>
+          </form>
+        </div>
+
+        <div class="card">
+          <h3><i class="fas fa-credit-card"></i> Subscription</h3>
+          <div class="tg-row">
+            <div class="tg-icon" id="subIcon"><i class="fas fa-crown"></i></div>
+            <div style="flex:1;">
+              <div class="tg-status" id="subStatusText">Checking…</div>
+              <div class="tg-sub" id="subSubText">—</div>
+            </div>
+          </div>
+          <div style="margin-top:14px;">
+            <button class="btn btn-upgrade btn-sm btn-block" id="subUpgradeBtn" style="display:none;">
+              <i class="fas fa-crown"></i> Upgrade to unlimited
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div>
+        <div class="card preview-card">
+          <h3><i class="fas fa-eye"></i> Preview</h3>
+          <div class="preview-stage" id="previewStage">
+            <div class="preview-empty" id="previewEmpty">
+              <i class="fas fa-image"></i>
+              <p>Fill in the form and generate your first poster. It'll show up right here.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3><i class="fas fa-clock-rotate-left"></i> This session</h3>
+          <div class="history-grid" id="historyGrid">
+            <p class="history-empty">Your generated posters will collect here.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- MODAL -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="modal">
+      <button class="modal-close" onclick="closeModal()">X</button>
+      <div class="modal-icon" id="modalIcon"></div>
+      <h3 id="modalTitle">Success!</h3>
+      <p id="modalMessage"></p>
+    </div>
+  </div>
+
+<script>
+  // API root — /api/auth/* lives here, plus /generate, /api/telegram/*, /api/subscription/*
+  const API_ROOT = 'https://postly-s3pk.onrender.com';
+
+  const $ = (id) => document.getElementById(id);
+  const token = localStorage.getItem('token');
+  if (!token) window.location.href = 'index.html';
+
+  function showModal(type, title, message) {
+    $('modal').className = 'modal ' + type;
+    $('modalIcon').innerHTML = type === 'success'
+      ? '<i class="fas fa-check-circle"></i>'
+      : '<i class="fas fa-times-circle"></i>';
+    $('modalTitle').textContent = title;
+    $('modalMessage').textContent = message;
+    $('modalOverlay').classList.add('show');
+  }
+  function closeModal() { $('modalOverlay').classList.remove('show'); }
+  window.closeModal = closeModal;
+
+  async function apiFetch(path, options) {
+    options = options || {};
+    const headers = Object.assign({ 'Authorization': 'Bearer ' + token }, options.headers || {});
+    if (options.body && typeof options.body === 'string' && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
+    const res = await fetch(API_ROOT + path, Object.assign({}, options, { headers }));
+    if (res.status === 401 || res.status === 403) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = 'index.html';
+      throw new Error('Session expired');
+    }
+    return res;
+  }
+  async function apiJson(path, options) {
+    const res = await apiFetch(path, options);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Request failed (' + res.status + ')');
+    return data;
+  }
+
+  // ---- character counters ----
+  [['query',100], ['hook',120], ['copy',220], ['cta',40]].forEach(function (pair) {
+    const input = $(pair[0]), counter = $(pair[0] + 'Count');
+    input.addEventListener('input', function () { counter.textContent = input.value.length + '/' + pair[1]; });
+  });
+
+  // ---- orientation pill styling ----
+  document.querySelectorAll('.orient-option').forEach(function (opt) {
+    opt.addEventListener('click', function () {
+      document.querySelectorAll('.orient-option').forEach(o => o.classList.remove('checked'));
+      opt.classList.add('checked');
+    });
+  });
+
+  // ---- load user / quota / subscription / telegram ----
+  async function loadMe() {
+    const data = await apiJson('/api/auth/me');
+    const u = data.user;
+    localStorage.setItem('user', JSON.stringify(u));
+
+    $('userNameLabel').textContent = u.fullName || u.email;
+    $('avatar').textContent = (u.fullName || u.email || '?').trim().charAt(0).toUpperCase();
+
+    const used = u.postersUsedToday, limit = u.dailyPosterLimit;
+    const isPaid = u.subscribed || limit === null;
+
+    if (isPaid) {
+      $('userPlanLabel').textContent = 'Unlimited plan';
+      $('quotaText').textContent = 'Unlimited';
+      $('quotaFill').style.width = '100%';
+      $('quotaFill').classList.remove('warn');
+      $('upgradeBtn').style.display = 'none';
+    } else {
+      $('userPlanLabel').textContent = 'Free plan';
+      $('quotaText').textContent = used + '/' + limit + ' today';
+      const pct = Math.min(100, Math.round((used / limit) * 100));
+      $('quotaFill').style.width = pct + '%';
+      $('quotaFill').classList.toggle('warn', pct >= 80);
+      $('upgradeBtn').style.display = 'inline-flex';
+    }
+
+    // nav badge — quick "is this user paying" signal
+    const badge = $('planBadge');
+    badge.textContent = isPaid ? 'Pro' : 'Free';
+    badge.classList.toggle('pro', isPaid);
+    badge.classList.toggle('free', !isPaid);
+
+    // dedicated subscription card — pulls exact renewal date / days left
+    try {
+      const sub = await apiJson('/api/subscription/status');
+      if (sub.subscribed) {
+        const endDate = sub.endDate ? new Date(sub.endDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : null;
+        $('subStatusText').textContent = 'Subscribed — unlimited posters';
+        $('subSubText').textContent = endDate
+          ? 'Renews on ' + endDate + ' (' + sub.daysLeft + ' day' + (sub.daysLeft === 1 ? '' : 's') + ' left)'
+          : 'Active';
+        $('subIcon').style.background = '#fff4e0';
+        $('subIcon').style.color = '#b8860b';
+        $('subUpgradeBtn').style.display = 'none';
+      } else {
+        $('subStatusText').textContent = 'Free plan';
+        $('subSubText').textContent = limit === null ? 'No daily limit set.' : (used + '/' + limit + ' posters used today.');
+        $('subIcon').style.background = '#e9f4ff';
+        $('subIcon').style.color = 'var(--gray-600)';
+        $('subUpgradeBtn').style.display = 'block';
+      }
+    } catch (e) {
+      $('subStatusText').textContent = isPaid ? 'Subscribed' : 'Free plan';
+      $('subSubText').textContent = 'Could not load billing details.';
+    }
+
+    const tgOn = u.isTelegramConnected;
+    $('tgDot').classList.toggle('on', tgOn);
+    $('tgCardTitle').innerHTML = tgOn
+      ? '<i class="fab fa-telegram-plane"></i> Telegram 2FA'
+      : '<i class="fab fa-telegram-plane"></i> Activate your account';
+    $('tgStatusText').textContent = tgOn ? 'Connected' : 'Not connected';
+    $('tgSubText').textContent = tgOn
+      ? 'You can use Telegram codes to reset your password.'
+      : 'Connect Telegram to unlock poster generation.';
+    $('tgConnectBtn').style.display = tgOn ? 'none' : 'block';
+    $('tgDisconnectBtn').style.display = tgOn ? 'block' : 'none';
+
+    if (!tgOn) {
+      try {
+        const conn = await apiJson('/api/telegram/connect');
+        $('tgConnectBtn').href = conn.startLink;
+        $('bannerConnectBtn').href = conn.startLink;
+      } catch (e) { /* bot may still be starting */ }
+    }
+
+    // ---- activation banner: non-blocking nudge, not a blur/lock ----
+    $('activateBanner').classList.toggle('show', !tgOn);
+
+    if (!tgOn) {
+      startActivationPolling();
+    } else {
+      stopActivationPolling();
+    }
+
+    return tgOn;
+  }
+
+  // Poll /api/auth/me while the banner is up, since Telegram confirmation
+  // happens out-of-band (the user taps Start in the Telegram app).
+  let activationPollTimer = null;
+  function startActivationPolling() {
+    if (activationPollTimer) return;
+    activationPollTimer = setInterval(async function () {
+      try {
+        const data = await apiJson('/api/auth/me');
+        if (data.user.isTelegramConnected) {
+          stopActivationPolling();
+          showModal('success', 'Account activated!', 'Telegram 2FA is connected — you\'re all set.');
+          await loadMe();
+        }
+      } catch (e) { /* keep polling silently */ }
+    }, 4000);
+  }
+  function stopActivationPolling() {
+    if (activationPollTimer) { clearInterval(activationPollTimer); activationPollTimer = null; }
+    $('bannerWaiting').classList.remove('show');
+  }
+
+  $('bannerConnectBtn').addEventListener('click', function () {
+    $('bannerWaiting').classList.add('show');
+  });
+
+  $('tgIconBtn').addEventListener('click', function () {
+    $('telegramCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+  $('tgDisconnectBtn').addEventListener('click', async function () {
+    try {
+      await apiJson('/api/auth/disconnect-telegram', { method: 'POST' });
+      showModal('success', 'Disconnected', 'Telegram 2FA has been turned off.');
+      await loadMe();
+    } catch (err) { showModal('error', 'Error', err.message); }
+  });
+
+  async function startCheckout(btn) {
+    btn.disabled = true;
+    try {
+      const data = await apiJson('/api/subscription/initiate', { method: 'POST' });
+      window.location.href = data.authorizationUrl;
+    } catch (err) {
+      showModal('error', 'Could not start checkout', err.message);
+      btn.disabled = false;
+    }
+  }
+  $('upgradeBtn').addEventListener('click', function () { startCheckout(this); });
+  $('subUpgradeBtn').addEventListener('click', function () { startCheckout(this); });
+
+  $('logoutBtn').addEventListener('click', function () {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = 'index.html';
+  });
+
+  // ---- poster generation ----
+  const sessionPosters = [];
+
+  function renderHistory() {
+    const grid = $('historyGrid');
+    if (!sessionPosters.length) {
+      grid.innerHTML = '<p class="history-empty">Your generated posters will collect here.</p>';
+      return;
+    }
+    grid.innerHTML = '';
+    sessionPosters.slice().reverse().forEach(function (p) {
+      const item = document.createElement('div');
+      item.className = 'history-item';
+      const img = document.createElement('img');
+      img.src = p.url; img.alt = p.hook;
+      item.appendChild(img);
+      item.addEventListener('click', function () { showResult(p.url, p.hook); });
+      grid.appendChild(item);
+    });
+  }
+
+  function showResult(url, hook) {
+    const stage = $('previewStage');
+    stage.innerHTML =
+      '<div class="preview-result">' +
+        '<img src="' + url + '" alt="' + escapeHtml(hook) + '">' +
+        '<div class="preview-actions">' +
+          '<a class="btn btn-primary btn-sm" href="' + url + '" download="' + escapeHtml((hook || 'poster').replace(/\s+/g, '_').slice(0, 40)) + '.jpg"><i class="fas fa-download"></i> Download</a>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function showLoadingState() {
+    $('previewStage').innerHTML =
+      '<div class="preview-loading"><div class="spinner"></div><p>Creating your poster…</p></div>';
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str || '';
+    return div.innerHTML;
+  }
+
+  $('genForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const alertEl = $('genAlert'); alertEl.className = 'alert';
+    const btn = $('generateBtn'); btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating…';
+    showLoadingState();
+
+    const params = new URLSearchParams({
+      query: $('query').value,
+      hook: $('hook').value,
+      copy: $('copy').value,
+      cta: $('cta').value || 'Learn More',
+      orientation: document.querySelector('input[name="orientation"]:checked').value
+    });
+
+    try {
+      const res = await apiFetch('/generate?' + params.toString());
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Could not generate poster');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const hookVal = $('hook').value;
+      sessionPosters.push({ url: url, hook: hookVal });
+      showResult(url, hookVal);
+      renderHistory();
+      await loadMe();
+    } catch (err) {
+      $('previewStage').innerHTML =
+        '<div class="preview-empty"><i class="fas fa-triangle-exclamation" style="color:var(--danger);"></i><p>' + escapeHtml(err.message) + '</p></div>';
+      alertEl.textContent = err.message;
+      alertEl.classList.add('error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Generate poster';
+    }
+  });
+
+  loadMe().catch(function (err) { console.error(err); });
+</script>
+</body>
+</html>
