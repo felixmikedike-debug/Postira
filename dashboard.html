@@ -58,10 +58,13 @@
       display: flex; align-items: center; gap: 10px;
       background: var(--primary-pale); border-radius: 999px; padding: 8px 16px;
       font-size: 13px; font-weight: 500; color: var(--primary);
+      transition: background .2s, color .2s;
     }
+    .quota-pill.full { background: #fdeceb; color: var(--danger); }
     .quota-track { width: 80px; height: 6px; background: #cfe0f7; border-radius: 999px; overflow: hidden; }
-    .quota-fill { height: 100%; background: var(--primary); border-radius: 999px; transition: width .3s; }
+    .quota-fill { height: 100%; background: var(--primary); border-radius: 999px; transition: width .3s, background .3s; }
     .quota-fill.warn { background: var(--warning); }
+    .quota-fill.full { background: var(--danger); }
 
     .icon-btn {
       width: 40px; height: 40px; border-radius: 50%; border: none;
@@ -109,6 +112,7 @@
       box-shadow: 0 8px 20px rgba(255,138,61,0.3);
     }
     .btn-upgrade:hover { transform: translateY(-1px); }
+    .btn-upgrade:disabled { opacity: .65; cursor: not-allowed; transform: none; }
     .btn-sm { padding: 8px 14px; font-size: 12.5px; border-radius: 10px; }
     .btn-block { width: 100%; }
 
@@ -178,6 +182,12 @@
     }
     .preview-actions { margin-top: 16px; display: flex; gap: 10px; justify-content: center; }
 
+    /* ---------- limit-reached state in preview ---------- */
+    .preview-limit { text-align: center; max-width: 300px; }
+    .preview-limit i { font-size: 42px; color: #ffb648; margin-bottom: 14px; display: block; }
+    .preview-limit h4 { font-size: 16px; margin-bottom: 6px; }
+    .preview-limit p { font-size: 13.5px; color: var(--gray-600); margin-bottom: 16px; line-height: 1.5; }
+
     /* ---------- history ---------- */
     .history-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
     .history-item { border-radius: 12px; overflow: hidden; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: transform .15s; }
@@ -188,6 +198,10 @@
     .alert { padding: 12px 16px; border-radius: 12px; font-size: 13.5px; margin-top: 14px; display: none; }
     .alert.error { background: #fdeceb; color: #a52c22; display: block; }
     .alert.ok { background: #e9f7ec; color: #1e7a34; display: block; }
+    .alert.limit {
+      background: #fff4e0; color: #7a4a00; display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; flex-wrap: wrap;
+    }
 
     /* ---------- telegram card ---------- */
     .tg-row { display: flex; align-items: center; gap: 12px; }
@@ -219,8 +233,10 @@
     .modal-icon { font-size: 56px; margin-bottom: 16px; }
     .modal.success .modal-icon { color: var(--success); }
     .modal.error .modal-icon { color: var(--danger); }
+    .modal.limit .modal-icon { color: #ffb648; }
     .modal h3 { font-size: 22px; margin-bottom: 12px; }
     .modal p { color: #666; margin-bottom: 4px; font-size: 15px; }
+    .modal-actions { margin-top: 18px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 
     @media (max-width: 480px) {
       .navbar-inner { padding: 14px 16px; }
@@ -307,7 +323,7 @@
       <!-- LEFT COLUMN -->
       <div>
         <div class="card" id="telegramCard">
-          <h3 id="tgCardTitle"><i class="fab fa-telegram-plane"></i> Activate your account</h3>
+          <h3><i class="fab fa-telegram-plane"></i> Telegram 2FA</h3>
           <div class="tg-row">
             <div class="tg-icon"><i class="fab fa-telegram-plane"></i></div>
             <div style="flex:1;">
@@ -413,6 +429,11 @@
       <div class="modal-icon" id="modalIcon"></div>
       <h3 id="modalTitle">Success!</h3>
       <p id="modalMessage"></p>
+      <div class="modal-actions" id="modalActions" style="display:none;">
+        <button class="btn btn-upgrade btn-sm" id="modalUpgradeBtn">
+          <i class="fas fa-crown"></i> Upgrade now
+        </button>
+      </div>
     </div>
   </div>
 
@@ -424,18 +445,106 @@
   const token = localStorage.getItem('token');
   if (!token) window.location.href = 'index.html';
 
-  function showModal(type, title, message) {
+  // ---- device fingerprint (anti multi-account abuse) ----
+  // Combines canvas rendering, audio output, and stable device/browser
+  // signals into a hash that's tied to THIS device, not the account. It
+  // survives clearing localStorage/cookies and signing up again, so the
+  // backend's per-device daily cap follows the device across every account
+  // created on it — hit the limit on account #1 and account #2 is capped
+  // from its very first request, no separate "warm up" period.
+  let _cachedFingerprint = null;
+  async function getDeviceFingerprint() {
+    const parts = [];
+
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      ctx.textBaseline = 'top';
+      ctx.font = '14px Arial';
+      ctx.fillStyle = '#f60';
+      ctx.fillRect(125, 1, 62, 20);
+      ctx.fillStyle = '#069';
+      ctx.fillText('fingerprint-check-\u{1F512}', 2, 15);
+      parts.push(canvas.toDataURL());
+    } catch (e) {
+      parts.push('no-canvas');
+    }
+
+    try {
+      const AudioCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      const ctx = new AudioCtx(1, 5000, 44100);
+      const oscillator = ctx.createOscillator();
+      oscillator.type = 'triangle';
+      oscillator.frequency.setValueAtTime(10000, ctx.currentTime);
+      const compressor = ctx.createDynamicsCompressor();
+      oscillator.connect(compressor);
+      compressor.connect(ctx.destination);
+      oscillator.start(0);
+      const buffer = await ctx.startRendering();
+      const data = buffer.getChannelData(0);
+      let sum = 0;
+      for (let i = 4500; i < 5000; i++) sum += Math.abs(data[i]);
+      parts.push(sum.toString());
+    } catch (e) {
+      parts.push('no-audio');
+    }
+
+    parts.push(navigator.userAgent || '');
+    parts.push(navigator.language || '');
+    parts.push(String(navigator.hardwareConcurrency || ''));
+    parts.push(String(navigator.deviceMemory || ''));
+    parts.push(screen.width + 'x' + screen.height + 'x' + screen.colorDepth);
+    parts.push(Intl.DateTimeFormat().resolvedOptions().timeZone || '');
+
+    const raw = parts.join('|');
+    const enc = new TextEncoder().encode(raw);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', enc);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+  }
+  async function getOrCreateFingerprint() {
+    if (_cachedFingerprint) return _cachedFingerprint;
+    _cachedFingerprint = await getDeviceFingerprint();
+    return _cachedFingerprint;
+  }
+  // Kick this off immediately on page load rather than waiting for the
+  // first poster request, so the hash is already cached (canvas/audio
+  // rendering has a small cost) by the time the user hits "Generate".
+  getOrCreateFingerprint().catch(function () { /* handled per-call below */ });
+
+  // type: 'success' | 'error' | 'limit'
+  // opts.onUpgrade: if provided, shows an "Upgrade now" button in the modal
+  function showModal(type, title, message, opts) {
+    opts = opts || {};
     $('modal').className = 'modal ' + type;
-    $('modalIcon').innerHTML = type === 'success'
-      ? '<i class="fas fa-check-circle"></i>'
-      : '<i class="fas fa-times-circle"></i>';
+    $('modalIcon').innerHTML =
+      type === 'success' ? '<i class="fas fa-check-circle"></i>' :
+      type === 'limit' ? '<i class="fas fa-crown"></i>' :
+      '<i class="fas fa-times-circle"></i>';
     $('modalTitle').textContent = title;
     $('modalMessage').textContent = message;
+
+    const actions = $('modalActions');
+    const upgradeBtn = $('modalUpgradeBtn');
+    if (opts.onUpgrade) {
+      actions.style.display = 'flex';
+      upgradeBtn.disabled = false;
+      upgradeBtn.innerHTML = '<i class="fas fa-crown"></i> Upgrade now';
+      upgradeBtn.onclick = function () { opts.onUpgrade(upgradeBtn); };
+    } else {
+      actions.style.display = 'none';
+      upgradeBtn.onclick = null;
+    }
+
     $('modalOverlay').classList.add('show');
   }
   function closeModal() { $('modalOverlay').classList.remove('show'); }
   window.closeModal = closeModal;
 
+  // ---- session vs. everything-else handling ----
+  // Only a 401 means "your token is invalid/expired" -> log out.
+  // A 403 (or any other non-2xx) is a normal API error (e.g. daily limit
+  // reached) and must NOT log the user out or redirect them away.
   async function apiFetch(path, options) {
     options = options || {};
     const headers = Object.assign({ 'Authorization': 'Bearer ' + token }, options.headers || {});
@@ -443,7 +552,7 @@
       headers['Content-Type'] = 'application/json';
     }
     const res = await fetch(API_ROOT + path, Object.assign({}, options, { headers }));
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = 'index.html';
@@ -454,8 +563,24 @@
   async function apiJson(path, options) {
     const res = await apiFetch(path, options);
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || 'Request failed (' + res.status + ')');
+    if (!res.ok) {
+      const err = new Error(data.error || 'Request failed (' + res.status + ')');
+      err.status = res.status;
+      err.data = data;
+      throw err;
+    }
     return data;
+  }
+
+  // Heuristic for "you've hit your daily poster limit" responses so the UI
+  // can offer an upgrade path instead of a generic error. Treats 403 as the
+  // limit-exceeded status (401 is reserved for expired/invalid sessions),
+  // and also matches on common wording in case the backend uses a different
+  // status code for this.
+  function isLimitError(status, message) {
+    if (status === 402 || status === 403 || status === 429) return true;
+    const m = (message || '').toLowerCase();
+    return m.includes('limit') || m.includes('quota') || m.includes('upgrade');
   }
 
   // ---- character counters ----
@@ -472,6 +597,51 @@
     });
   });
 
+  let atLimit = false; // tracked from /api/auth/me so the form/preview can reflect it
+  let deviceBlocked = false; // tracked from /api/device/status — this device already belongs to another free account
+
+  // Checks whether this device is already locked to a different account
+  // BEFORE the person tries to generate, so we can disable the form and
+  // explain why instead of surfacing a bare 403 after they've filled
+  // everything in. Read-only on the backend — doesn't create a binding.
+  async function checkDeviceStatus() {
+    const fp = await getOrCreateFingerprint().catch(function () { return null; });
+    if (!fp) return; // no fingerprint available — nothing to check, backend falls back to other caps
+    try {
+      const res = await apiFetch('/api/device/status', { headers: { 'X-Client-Fingerprint': fp } });
+      const data = await res.json().catch(function () { return {}; });
+      deviceBlocked = !!data.blocked;
+    } catch (e) {
+      deviceBlocked = false; // fail open on the UI check; /generate is still the real enforcement point
+    }
+    applyDeviceBlockedUI();
+  }
+
+  function applyDeviceBlockedUI() {
+    const btn = $('generateBtn');
+    const alertEl = $('genAlert');
+    if (deviceBlocked) {
+      btn.disabled = true;
+      alertEl.className = 'alert error';
+      alertEl.textContent = 'This device has already generated posters on a different Postira account. Each device is limited to one free account — subscribe to use another account here.';
+      $('previewStage').innerHTML =
+        '<div class="preview-limit">' +
+          '<i class="fas fa-crown"></i>' +
+          '<h4>This device is linked to another account</h4>' +
+          '<p>Free posters are limited to one account per device. Subscribe to generate from this account too.</p>' +
+          '<button class="btn btn-upgrade btn-sm" id="deviceUpgradeBtn"><i class="fas fa-crown"></i> Upgrade now</button>' +
+        '</div>';
+      const deviceUpgradeBtn = $('deviceUpgradeBtn');
+      if (deviceUpgradeBtn) deviceUpgradeBtn.addEventListener('click', function () { startCheckout(this); });
+    } else {
+      btn.disabled = false;
+      if (alertEl.textContent.indexOf('already generated posters on a different') !== -1) {
+        alertEl.className = 'alert';
+        alertEl.textContent = '';
+      }
+    }
+  }
+
   // ---- load user / quota / subscription / telegram ----
   async function loadMe() {
     const data = await apiJson('/api/auth/me');
@@ -483,19 +653,26 @@
 
     const used = u.postersUsedToday, limit = u.dailyPosterLimit;
     const isPaid = u.subscribed || limit === null;
+    atLimit = !isPaid && limit !== null && used >= limit;
+
+    const quotaPill = $('quotaPill');
+    const quotaFill = $('quotaFill');
 
     if (isPaid) {
       $('userPlanLabel').textContent = 'Unlimited plan';
       $('quotaText').textContent = 'Unlimited';
-      $('quotaFill').style.width = '100%';
-      $('quotaFill').classList.remove('warn');
+      quotaFill.style.width = '100%';
+      quotaFill.classList.remove('warn', 'full');
+      quotaPill.classList.remove('full');
       $('upgradeBtn').style.display = 'none';
     } else {
       $('userPlanLabel').textContent = 'Free plan';
       $('quotaText').textContent = used + '/' + limit + ' today';
       const pct = Math.min(100, Math.round((used / limit) * 100));
-      $('quotaFill').style.width = pct + '%';
-      $('quotaFill').classList.toggle('warn', pct >= 80);
+      quotaFill.style.width = pct + '%';
+      quotaFill.classList.toggle('warn', pct >= 80 && !atLimit);
+      quotaFill.classList.toggle('full', atLimit);
+      quotaPill.classList.toggle('full', atLimit);
       $('upgradeBtn').style.display = 'inline-flex';
     }
 
@@ -531,9 +708,6 @@
 
     const tgOn = u.isTelegramConnected;
     $('tgDot').classList.toggle('on', tgOn);
-    $('tgCardTitle').innerHTML = tgOn
-      ? '<i class="fab fa-telegram-plane"></i> Telegram 2FA'
-      : '<i class="fab fa-telegram-plane"></i> Activate your account';
     $('tgStatusText').textContent = tgOn ? 'Connected' : 'Not connected';
     $('tgSubText').textContent = tgOn
       ? 'You can use Telegram codes to reset your password.'
@@ -597,14 +771,16 @@
     } catch (err) { showModal('error', 'Error', err.message); }
   });
 
+  // Redirects the browser straight to checkout. Used by every "Upgrade"
+  // entry point (nav pill, subscription card, limit modal, limit banner).
   async function startCheckout(btn) {
-    btn.disabled = true;
+    if (btn) btn.disabled = true;
     try {
       const data = await apiJson('/api/subscription/initiate', { method: 'POST' });
       window.location.href = data.authorizationUrl;
     } catch (err) {
       showModal('error', 'Could not start checkout', err.message);
-      btn.disabled = false;
+      if (btn) btn.disabled = false;
     }
   }
   $('upgradeBtn').addEventListener('click', function () { startCheckout(this); });
@@ -653,6 +829,19 @@
       '<div class="preview-loading"><div class="spinner"></div><p>Creating your poster…</p></div>';
   }
 
+  // Shown in the preview pane when the daily limit is hit — replaces the
+  // generic error state and offers a direct path to checkout.
+  function showLimitState() {
+    $('previewStage').innerHTML =
+      '<div class="preview-limit">' +
+        '<i class="fas fa-crown"></i>' +
+        '<h4>You\'ve used today\'s free posters</h4>' +
+        '<p>Upgrade to generate unlimited posters, any time.</p>' +
+        '<button class="btn btn-upgrade btn-sm" id="previewUpgradeBtn"><i class="fas fa-crown"></i> Upgrade now</button>' +
+      '</div>';
+    $('previewUpgradeBtn').addEventListener('click', function () { startCheckout(this); });
+  }
+
   function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str || '';
@@ -661,6 +850,10 @@
 
   $('genForm').addEventListener('submit', async function (e) {
     e.preventDefault();
+    if (deviceBlocked) {
+      applyDeviceBlockedUI();
+      return;
+    }
     const alertEl = $('genAlert'); alertEl.className = 'alert';
     const btn = $('generateBtn'); btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating…';
@@ -675,10 +868,42 @@
     });
 
     try {
-      const res = await apiFetch('/generate?' + params.toString());
+      // Fingerprint failures (old browser, blocked crypto.subtle, etc.)
+      // must never block poster generation — they just fall back to the
+      // account + IP caps on the backend.
+      const fp = await getOrCreateFingerprint().catch(function () { return null; });
+      const res = await apiFetch('/generate?' + params.toString(), fp ? { headers: { 'X-Client-Fingerprint': fp } } : {});
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'Could not generate poster');
+        const message = errData.error || 'Could not generate poster';
+
+        if (isLimitError(res.status, message)) {
+          const isDeviceBlock = message.toLowerCase().indexOf('device') !== -1;
+          if (isDeviceBlock) {
+            deviceBlocked = true;
+            applyDeviceBlockedUI();
+            showModal('limit', 'Device already in use', message, {
+              onUpgrade: function (upgradeBtn) { startCheckout(upgradeBtn); }
+            });
+            return;
+          }
+
+          // Daily limit reached: stay logged in, show an upgrade path
+          // instead of a bare error (and instead of logging the user out).
+          showLimitState();
+          alertEl.classList.add('limit');
+          alertEl.innerHTML =
+            '<span>' + escapeHtml(message) + '</span>' +
+            '<button type="button" class="btn btn-upgrade btn-sm" id="alertUpgradeBtn">Upgrade</button>';
+          $('alertUpgradeBtn').addEventListener('click', function () { startCheckout(this); });
+          showModal('limit', 'Daily limit reached', message, {
+            onUpgrade: function (upgradeBtn) { startCheckout(upgradeBtn); }
+          });
+          await loadMe(); // refresh quota pill so it visually reflects "full"
+          return;
+        }
+
+        throw new Error(message);
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -699,6 +924,7 @@
   });
 
   loadMe().catch(function (err) { console.error(err); });
+  checkDeviceStatus().catch(function (err) { console.error(err); });
 </script>
 </body>
 </html>
