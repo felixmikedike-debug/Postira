@@ -644,7 +644,7 @@
 
   // ---- load user / quota / subscription / telegram ----
   async function loadMe() {
-    const data = await apiJson('/api/auth/me');
+    const data = await apiJson('/api/dashboard/bootstrap');
     const u = data.user;
     localStorage.setItem('user', JSON.stringify(u));
 
@@ -682,28 +682,23 @@
     badge.classList.toggle('pro', isPaid);
     badge.classList.toggle('free', !isPaid);
 
-    // dedicated subscription card — pulls exact renewal date / days left
-    try {
-      const sub = await apiJson('/api/subscription/status');
-      if (sub.subscribed) {
-        const endDate = sub.endDate ? new Date(sub.endDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : null;
-        $('subStatusText').textContent = 'Subscribed — unlimited posters';
-        $('subSubText').textContent = endDate
-          ? 'Renews on ' + endDate + ' (' + sub.daysLeft + ' day' + (sub.daysLeft === 1 ? '' : 's') + ' left)'
-          : 'Active';
-        $('subIcon').style.background = '#fff4e0';
-        $('subIcon').style.color = '#b8860b';
-        $('subUpgradeBtn').style.display = 'none';
-      } else {
-        $('subStatusText').textContent = 'Free plan';
-        $('subSubText').textContent = limit === null ? 'No daily limit set.' : (used + '/' + limit + ' posters used today.');
-        $('subIcon').style.background = '#e9f4ff';
-        $('subIcon').style.color = 'var(--gray-600)';
-        $('subUpgradeBtn').style.display = 'block';
-      }
-    } catch (e) {
-      $('subStatusText').textContent = isPaid ? 'Subscribed' : 'Free plan';
-      $('subSubText').textContent = 'Could not load billing details.';
+    // dedicated subscription card — comes bundled in the bootstrap response now
+    const sub = data.subscription;
+    if (sub && sub.subscribed) {
+      const endDate = sub.endDate ? new Date(sub.endDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : null;
+      $('subStatusText').textContent = 'Subscribed — unlimited posters';
+      $('subSubText').textContent = endDate
+        ? 'Renews on ' + endDate + ' (' + sub.daysLeft + ' day' + (sub.daysLeft === 1 ? '' : 's') + ' left)'
+        : 'Active';
+      $('subIcon').style.background = '#fff4e0';
+      $('subIcon').style.color = '#b8860b';
+      $('subUpgradeBtn').style.display = 'none';
+    } else {
+      $('subStatusText').textContent = 'Free plan';
+      $('subSubText').textContent = limit === null ? 'No daily limit set.' : (used + '/' + limit + ' posters used today.');
+      $('subIcon').style.background = '#e9f4ff';
+      $('subIcon').style.color = 'var(--gray-600)';
+      $('subUpgradeBtn').style.display = 'block';
     }
 
     const tgOn = u.isTelegramConnected;
@@ -715,12 +710,9 @@
     $('tgConnectBtn').style.display = tgOn ? 'none' : 'block';
     $('tgDisconnectBtn').style.display = tgOn ? 'block' : 'none';
 
-    if (!tgOn) {
-      try {
-        const conn = await apiJson('/api/telegram/connect');
-        $('tgConnectBtn').href = conn.startLink;
-        $('bannerConnectBtn').href = conn.startLink;
-      } catch (e) { /* bot may still be starting */ }
+    if (!tgOn && data.telegramConnect) {
+      $('tgConnectBtn').href = data.telegramConnect.startLink;
+      $('bannerConnectBtn').href = data.telegramConnect.startLink;
     }
 
     // ---- activation banner: non-blocking nudge, not a blur/lock ----
