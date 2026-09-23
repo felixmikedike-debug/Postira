@@ -343,8 +343,35 @@
           <h3><i class="fas fa-image"></i> Generate a poster</h3>
           <form id="genForm">
             <div class="form-group">
+              <label>Photo source</label>
+              <div class="orient-group">
+                <label class="orient-option checked" data-src="stock">
+                  <input type="radio" name="photoSource" value="stock" checked>
+                  <i class="fas fa-magnifying-glass"></i>Stock photo
+                </label>
+                <label class="orient-option" data-src="upload">
+                  <input type="radio" name="photoSource" value="upload">
+                  <i class="fas fa-upload"></i>Upload photo
+                </label>
+              </div>
+            </div>
+            <div class="form-group" id="queryGroup">
               <label for="query">Photo search <span class="count" id="queryCount">0/100</span></label>
               <input id="query" type="text" maxlength="100" placeholder="e.g. sneakers on concrete" required>
+            </div>
+            <div class="form-group" id="uploadGroup" style="display:none;">
+              <label>Your photo</label>
+              <input id="customImageInput" type="file" accept="image/jpeg,image/png,image/webp" style="display:none;">
+              <div id="uploadDropzone" style="border:2px dashed var(--gray-200);border-radius:12px;padding:18px;text-align:center;cursor:pointer;transition:border-color .2s;">
+                <div id="uploadDropzoneEmpty">
+                  <i class="fas fa-cloud-arrow-up" style="font-size:24px;color:var(--gray-600);display:block;margin-bottom:6px;"></i>
+                  <span style="font-size:13px;color:var(--gray-600);">Click to choose a photo (JPEG, PNG, or WebP, up to 8MB)</span>
+                </div>
+                <div id="uploadPreviewWrap" style="display:none;">
+                  <img id="uploadPreviewImg" style="max-width:100%;max-height:160px;border-radius:8px;display:block;margin:0 auto 8px;">
+                  <span id="uploadStatusText" style="font-size:12.5px;color:var(--gray-600);"></span>
+                </div>
+              </div>
             </div>
             <div class="form-group">
               <label for="hook">Hook <span class="count" id="hookCount">0/120</span></label>
@@ -589,10 +616,93 @@
     input.addEventListener('input', function () { counter.textContent = input.value.length + '/' + pair[1]; });
   });
 
-  // ---- orientation pill styling ----
+  // ---- photo source: stock search vs. custom upload ----
+  const MAX_UPLOAD_BYTES_CLIENT = 8 * 1024 * 1024; // must match MAX_UPLOAD_BYTES on the server
+  let uploadedImageKey = null; // set once a presigned PUT to R2/B2 succeeds
+  let uploadInFlight = false;
+
+  document.querySelectorAll('input[name="photoSource"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      const usingUpload = radio.value === 'upload' && radio.checked;
+      $('queryGroup').style.display = usingUpload ? 'none' : 'block';
+      $('uploadGroup').style.display = usingUpload ? 'block' : 'none';
+      $('query').required = !usingUpload;
+      if (!usingUpload) {
+        // Switching back to stock search drops any pending/uploaded image
+        // so a stale key never accidentally rides along on submit.
+        uploadedImageKey = null;
+        uploadInFlight = false;
+        $('customImageInput').value = '';
+        $('uploadDropzoneEmpty').style.display = 'block';
+        $('uploadPreviewWrap').style.display = 'none';
+      }
+    });
+  });
+
+  $('uploadDropzone').addEventListener('click', function () { $('customImageInput').click(); });
+
+  $('customImageInput').addEventListener('change', async function () {
+    const file = this.files && this.files[0];
+    if (!file) return;
+
+    uploadedImageKey = null;
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (allowedTypes.indexOf(file.type) === -1) {
+      $('uploadStatusText').textContent = 'Please choose a JPEG, PNG, or WebP image.';
+      $('uploadDropzoneEmpty').style.display = 'block';
+      $('uploadPreviewWrap').style.display = 'none';
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES_CLIENT) {
+      $('uploadStatusText').textContent = 'That image is too large (max 8MB).';
+      $('uploadDropzoneEmpty').style.display = 'block';
+      $('uploadPreviewWrap').style.display = 'none';
+      return;
+    }
+
+    // Show a local preview immediately — doesn't wait on the network.
+    $('uploadDropzoneEmpty').style.display = 'none';
+    $('uploadPreviewWrap').style.display = 'block';
+    $('uploadPreviewImg').src = URL.createObjectURL(file);
+    $('uploadStatusText').textContent = 'Uploading…';
+    uploadInFlight = true;
+
+    try {
+      const presign = await apiJson('/api/uploads/presign', {
+        method: 'POST',
+        body: JSON.stringify({ contentType: file.type })
+      });
+
+      // Direct-to-bucket upload: goes straight to R2/B2, never touches our
+      // own server. Only send the header that was actually signed
+      // (Content-Type) — anything extra, like an Authorization header,
+      // would invalidate the presigned URL's signature.
+      const putRes = await fetch(presign.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file
+      });
+
+      if (!putRes.ok) throw new Error('Upload failed (' + putRes.status + ')');
+
+      uploadedImageKey = presign.key;
+      $('uploadStatusText').textContent = 'Uploaded — ready to use.';
+    } catch (err) {
+      uploadedImageKey = null;
+      $('uploadStatusText').textContent = 'Upload failed: ' + err.message;
+    } finally {
+      uploadInFlight = false;
+    }
+  });
+
+  // ---- pill-group styling (orientation, photo source) ----
+  // Scoped to each .orient-group individually — the page now has two
+  // separate pill groups (photo source, orientation), and un-checking
+  // globally would let clicking one group's pill wipe the other's state.
   document.querySelectorAll('.orient-option').forEach(function (opt) {
     opt.addEventListener('click', function () {
-      document.querySelectorAll('.orient-option').forEach(o => o.classList.remove('checked'));
+      const group = opt.closest('.orient-group');
+      group.querySelectorAll('.orient-option').forEach(o => o.classList.remove('checked'));
       opt.classList.add('checked');
     });
   });
@@ -846,18 +956,33 @@
       applyDeviceBlockedUI();
       return;
     }
+
+    const usingUpload = document.querySelector('input[name="photoSource"]:checked').value === 'upload';
+    if (usingUpload && uploadInFlight) {
+      $('genAlert').className = 'alert error';
+      $('genAlert').textContent = 'Your photo is still uploading — one moment.';
+      return;
+    }
+    if (usingUpload && !uploadedImageKey) {
+      $('genAlert').className = 'alert error';
+      $('genAlert').textContent = 'Please choose a photo to upload first.';
+      return;
+    }
+
     const alertEl = $('genAlert'); alertEl.className = 'alert';
     const btn = $('generateBtn'); btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating…';
     showLoadingState();
 
-    const params = new URLSearchParams({
-      query: $('query').value,
-      hook: $('hook').value,
-      copy: $('copy').value,
-      cta: $('cta').value || 'Learn More',
-      orientation: document.querySelector('input[name="orientation"]:checked').value
-    });
+    const params = new URLSearchParams(Object.assign(
+      {
+        hook: $('hook').value,
+        copy: $('copy').value,
+        cta: $('cta').value || 'Learn More',
+        orientation: document.querySelector('input[name="orientation"]:checked').value
+      },
+      usingUpload ? { imageKey: uploadedImageKey } : { query: $('query').value }
+    ));
 
     try {
       // Fingerprint failures (old browser, blocked crypto.subtle, etc.)
