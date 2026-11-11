@@ -268,6 +268,29 @@
       font-size: 12px; color: var(--gray-600); display: none; align-items: center; gap: 6px;
     }
     .activate-banner-waiting.show { display: flex; }
+
+    /* ---------- Animate: product tabs + small "try it" bubble ---------- */
+    .product-tabs { display: flex; gap: 6px; margin-bottom: 18px; background: var(--white); padding: 6px; border-radius: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); width: max-content; max-width: 100%; }
+    .ptab-wrap { position: relative; display: flex; }
+    .ptab { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 18px; min-height: 44px; border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--gray-600); transition: background .15s, color .15s; }
+    a.ptab:hover { background: var(--primary-pale); color: var(--primary); }
+    .ptab.active { background: var(--primary); color: #fff; }
+    .new-chip { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; background: linear-gradient(135deg, #ff6b6b, #ffb347); color: #fff; padding: 2px 7px; border-radius: 999px; }
+    .nudge { position: absolute; left: 0; right: 0; top: 100%; height: 0; z-index: 90; animation: nudgeIn .25s ease-out; }
+    .nudge[hidden] { display: none; }
+    .nudge-arrow { position: absolute; left: 50%; top: 7px; width: 14px; height: 14px; margin-left: -7px; background: var(--white); border: 1px solid var(--gray-200); border-radius: 3px; transform: rotate(45deg); }
+    .nudge-card { position: absolute; right: 0; top: 13px; width: min(280px, calc(100vw - 32px)); background: var(--white); border: 1px solid var(--gray-200); border-radius: 16px; padding: 14px 16px; box-shadow: 0 12px 36px rgba(0,0,0,0.16); }
+    .nudge-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; padding-right: 26px; }
+    .nudge-card p { font-size: 13px; line-height: 1.5; color: var(--gray-600); margin: 6px 0 12px; }
+    .nudge-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .nudge-row .btn { display: inline-flex; align-items: center; gap: 6px; }
+    .nudge-note { font-size: 12px; color: var(--gray-600); }
+    .nudge-x { position: absolute; top: 4px; right: 4px; width: 36px; height: 36px; border: 0; background: none; border-radius: 50%; color: var(--gray-600); font-size: 20px; line-height: 1; cursor: pointer; }
+    .nudge-x:hover { background: var(--gray-200); }
+    .ptab:focus-visible, .nudge-x:focus-visible, .nudge-row .btn:focus-visible { outline: 3px solid var(--primary-light); outline-offset: 2px; }
+    @keyframes nudgeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .nudge { animation: none; } }
+    @media (max-width: 700px) { .product-tabs { width: 100%; } .product-tabs > .ptab, .ptab-wrap { flex: 1; } .ptab-wrap .ptab { flex: 1; } }
   </style>
 </head>
 <body>
@@ -318,6 +341,26 @@
   </div>
 
   <main>
+
+    <nav class="product-tabs" aria-label="Postira tools">
+      <span class="ptab active" aria-current="page"><i class="fas fa-image" aria-hidden="true"></i> Posters</span>
+      <div class="ptab-wrap">
+        <a class="ptab" id="animTab" href="animate.html"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i> Animate <span class="new-chip">New</span></a>
+        <div class="nudge" id="animNudge" role="region" aria-label="New feature" hidden>
+          <span class="nudge-arrow" aria-hidden="true"></span>
+          <div class="nudge-card">
+            <button type="button" class="nudge-x" id="animNudgeClose" aria-label="Dismiss">&times;</button>
+            <div class="nudge-title"><span class="new-chip">New</span> Animate is here</div>
+            <p>Make a presenter talk with your own voice clip, right in your browser.</p>
+            <div class="nudge-row">
+              <a class="btn btn-primary btn-sm" id="animNudgeGo" href="animate.html">Try it out</a>
+              <span class="nudge-note" id="animStatus">Free to try</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </nav>
+
     <div class="layout">
 
       <!-- LEFT COLUMN -->
@@ -1098,5 +1141,38 @@
   loadMe().catch(function (err) { console.error(err); });
   checkDeviceStatus().catch(function (err) { console.error(err); });
 </script>
+
+  <script>
+  // Animate "try it out" bubble. Isolated so it can never affect poster generation.
+  (function () {
+    try {
+      var KEY = 'postira_animate_nudge', nudge = document.getElementById('animNudge');
+      var seen = function () { try { return localStorage.getItem(KEY) === 'hide'; } catch (e) { return false; } };
+      var remember = function () { try { localStorage.setItem(KEY, 'hide'); } catch (e) {} };
+      var hide = function (focusTab) {
+        nudge.hidden = true; remember();
+        if (focusTab) document.getElementById('animTab').focus();
+      };
+      document.getElementById('animNudgeClose').addEventListener('click', function () { hide(true); });
+      document.getElementById('animNudgeGo').addEventListener('click', remember);
+      document.getElementById('animTab').addEventListener('click', remember);
+      nudge.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(true); });
+      if (!seen()) setTimeout(function () { if (!seen()) nudge.hidden = false; }, 1200);
+
+      var note = document.getElementById('animStatus'), t = localStorage.getItem('token');
+      if (!note || !t) return;
+      fetch('https://posterky.onrender.com/api/video/status', { headers: { Authorization: 'Bearer ' + t } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {
+          if (!j) return;
+          var left = (j.cleanLeft || 0) + (j.watermarkedLeft || 0);
+          note.textContent = j.subscribed ? 'Unlimited plan'
+            : left > 0 ? left + (left === 1 ? ' free video' : ' free videos') + ' today'
+            : 'Free videos used today';
+        })
+        .catch(function () {});
+    } catch (e) {}
+  })();
+  </script>
 </body>
 </html>
