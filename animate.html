@@ -444,29 +444,40 @@ segs=segs.map(([s0,s1])=>{let a=Math.round(s0*100),b=Math.round(s1*100),l1=12,l2
   let l=es[f],r=es[f];for(let k=f-1;k>=0&&f-k<60&&es[k]<=es[f];k--)l=Math.min(l,es[k]);for(let k=f+1;k<en&&k-f<60&&es[k]<=es[f];k++)r=Math.min(r,es[k]);
   const pr=es[f]-Math.max(l,r);if(pr>ref*.06)pk.push({t:f*hs,v:es[f],p:pr/ref})}}
  const peaks=[];for(const q of pk){const l=peaks[peaks.length-1];if(l&&q.t-l.t<.07){if(q.v>l.v)peaks[peaks.length-1]=q}else peaks.push(q)}
+ {const dd=Math.max(1,Math.round(sr/8000)),r8=sr/dd,nd=Math.floor(n/dd),y=new Float32Array(nd);for(let i=0;i<nd;i++){let q=0;for(let k=0;k<dd;k++)q+=m[i*dd+k];y[i]=q/dd}
+  const N=Math.round(r8*.032),l0=Math.max(2,Math.round(r8/500)),l1=Math.round(r8/80);
+  for(const q of peaks){let best=0;for(let o=-3;o<=3;o++){const c=Math.round((q.t+o*.01)*r8)-(N>>1);if(c<0||c+N+l1>=nd)continue;let e0=0;for(let i=0;i<N;i++)e0+=y[c+i]*y[c+i];if(e0<1e-9)continue;
+   for(let lag=l0;lag<=l1;lag++){let a=0,e1=0;for(let i=0;i<N;i++){a+=y[c+i]*y[c+i+lag];e1+=y[c+i+lag]*y[c+i+lag]}const r=a/Math.sqrt(e0*e1+1e-12);if(r>best)best=r}}
+   q.vc=best}}
  return{env:es,eh:hs,peaks}}catch(e){return{env:null,eh:.005,peaks:[]}}})();
  return{mono:m,segs,env:pe.env,eh:pe.eh,peaks:pe.peaks}}
 /* syllable-aware placement: line the script's syllables up with the vowel peaks actually heard in the audio */
-const syl=w=>{const d=(w.match(/\d/g)||[]).length,t=w.toLowerCase().replace(/[^a-z]/g,'');if(!t)return d?Math.max(1,Math.round(d*1.4)):1;
- let n=(t.match(/[aeiouy]+/g)||[]).length;if(n>1&&/[^aeiouy]e$/.test(t)&&!/[^aeiouy]le$/.test(t))n--;if(n>1&&/[^aeiouytd]ed$/.test(t))n--;return Math.max(1,n+Math.round(d*1.4))};
-function valleyT(a,b){const E=upl.env,h=upl.eh;if(b-a<.02)return(a+b)/2;let f0=Math.max(0,Math.floor(a/h)),f1=Math.min(E.length-1,Math.ceil(b/h)),bf=f0,bv=1e9;for(let f=f0;f<=f1;f++)if(E[f]<=bv){bv=E[f];bf=f}return bf*h}
+const SYX={every:2,everything:3,everyone:3,something:2,sometimes:2,someone:2,somebody:3,evening:2,business:2,different:2,interesting:3,family:3,favorite:3,probably:3,comfortable:3,vegetable:3,chocolate:2,camera:3,average:3,beautiful:3,quiet:2,diet:2,idea:3,area:3,video:3,radio:3,create:2,created:3,creative:3,science:2,being:2,doing:2,going:2,people:2,poem:2,really:2,usually:3,actually:3,especially:4,literally:4,business:2,laboratory:4,aluminum:4,every_:2,our:1,hour:1,fire:1,were:1,where:1,there:1,here:1,here:1};
+const syl=w=>{const d=(w.match(/\d/g)||[]).length,t=w.toLowerCase().replace(/[^a-z]/g,'');if(!t)return d?Math.max(1,Math.round(d*1.4)):1;if(SYX[t])return SYX[t];
+ let n=(t.match(/[aeiouy]+/g)||[]).length;if(n>1&&/[^aeiouy]e$/.test(t)&&!/[^aeiouy]le$/.test(t))n--;if(n>1&&/[^aeiouytd]ed$/.test(t))n--;if(n>1&&/[^aeiouyszxcgh]es$/.test(t))n--;return Math.max(1,n+Math.round(d*1.4))};
 function placeGroup(rs,toks){
- const gs=rs[0][0],ge=rs[rs.length-1][1],pk=upl.peaks.filter(p=>rs.some(q=>p.t>=q[0]&&p.t<=q[1])),sy=toks.map(syl),K=sy.reduce((p,q)=>p+q,0),P=pk.length;
+ const gs=rs[0][0],ge=rs[rs.length-1][1],ri=[],pk=upl.peaks.filter(p=>{const r=rs.findIndex(q=>p.t>=q[0]&&p.t<=q[1]);if(r<0)return false;ri.push(r);return true}),sy=toks.map(syl),K=sy.reduce((p,q)=>p+q,0),P=pk.length;
  if(!upl.env||!K||P<K*.35||P>K*2.5||(K+1)*(P+1)>6e6)return null;
- const L=K+1,M=P+1,D=new Float32Array(L*M),B=new Uint8Array(L*M),mx=pk.reduce((p,q)=>Math.max(p,q.p),1e-6),sk=pk.map(p=>.25+.75*Math.min(1,p.p/(.6*mx))),dur=Math.max(.2,ge-gs),tex=k=>gs+(k+.5)/K*(ge-gs);
+ /* typical gap between syllables here, so the matcher knows what "one syllable apart" looks like in this voice */
+ const iv=[];for(let i=1;i<P;i++)if(ri[i]===ri[i-1]&&pk[i].t-pk[i-1].t<.5)iv.push(pk[i].t-pk[i-1].t);iv.sort((p,q)=>p-q);const med=Math.max(.12,iv.length?iv[iv.length>>1]:.22);
+ const L=K+1,M=P+1,D=new Float32Array(L*M),B=new Uint8Array(L*M),mx=pk.reduce((p,q)=>Math.max(p,q.p),1e-6),dur=Math.max(.2,ge-gs),tex=k=>gs+(k+.5)/K*(ge-gs),c01=v=>Math.max(0,Math.min(1,v));
+ /* leaving a peak unused is cheap when it is weak and sits tight against its neighbours (probably noise); leaving a syllable without a peak is cheap only where there is room for one */
+ const sk=pk.map((p,i)=>{const l=i&&ri[i]===ri[i-1]?p.t-pk[i-1].t:9,r=i<P-1&&ri[i]===ri[i+1]?pk[i+1].t-p.t:9;return(.2+.8*c01(p.p/(.6*mx)))*(.35+.65*c01(Math.min(l,r)/(.8*med)))*(.25+.75*c01(((p.vc==null?.6:p.vc)-.25)/.4))});
+ const mg=new Float32Array(M);for(let p=0;p<M;p++){const g=p>=1&&p<P&&ri[p]===ri[p-1]?pk[p].t-pk[p-1].t:(p>=1&&p<P?0:1.2*med);mg[p]=.15+1.2*c01(1-g/(1.8*med))}
  for(let k=0;k<L;k++)for(let p=0;p<M;p++){const i=k*M+p;if(!k&&!p)continue;let best=1e9,mv=0;
-  if(k&&p){const c=D[i-M-1]+2*Math.abs(pk[p-1].t-tex(k-1))/dur;if(c<best){best=c;mv=1}}
+  if(k&&p){const c=D[i-M-1]+0.03*Math.abs(pk[p-1].t-tex(k-1))/dur;if(c<best){best=c;mv=1}}
   if(p){const c=D[i-1]+sk[p-1];if(c<best){best=c;mv=2}}
-  if(k){const c=D[i-M]+.9;if(c<best){best=c;mv=3}}
+  if(k){const c=D[i-M]+mg[p];if(c<best){best=c;mv=3}}
   D[i]=best;B[i]=mv}
  const mt=new Array(K).fill(-1);{let k=K,p=P;while(k||p){const mv=B[k*M+p];if(mv===1){mt[k-1]=p-1;k--;p--}else if(mv===2)p--;else k--}}
  const ts=new Array(K);{let ia=-1,ta=gs-.08;for(let k=0;k<=K;k++){if(k<K&&mt[k]<0)continue;const tb=k<K?pk[mt[k]].t:ge+.08;for(let j=ia+1;j<k;j++)ts[j]=ta+(tb-ta)*(j-ia)/(k-ia);if(k<K)ts[k]=tb;ia=k;ta=tb}}
+ /* a word shows up shortly before its first vowel is heard (about 80 ms, less if the last syllable was right before it) */
  const out=[];let si=0;
- toks.forEach((w,j)=>{const tc=ts[si];out.push({t0:j?(v=>v+.3*(tc-v))(valleyT(ts[si-1],tc)):gs,t1:ge,fs:tc,ls:ts[si+sy[j]-1]});si+=sy[j]});
- for(let j=1;j<out.length;j++)out[j].t0=Math.max(out[j].t0,out[j-1].t0+.06);
+ toks.forEach((w,j)=>{const tc=ts[si];out.push({t0:j?tc-Math.min(.08,.45*(tc-ts[si-1])):Math.max(gs,tc-.14),t1:ge,fs:tc,ls:ts[si+sy[j]-1]});si+=sy[j]});
+ for(let j=1;j<out.length;j++)out[j].t0=Math.max(out[j].t0,out[j-1].t0+.05);
  for(let j=out.length-1;j>=1;j--)out[j-1].t0=Math.min(out[j-1].t0,out[j].t0-.03);
  for(let j=0;j<out.length-1;j++)out[j].t1=out[j+1].t0;
- for(let k=0;k<rs.length-1;k++){const gA=rs[k][1],gB=rs[k+1][0];for(let j=0;j<out.length-1;j++)if(out[j].ls<=gA+.001&&out[j+1].fs>=gB-.001){out[j].t1=Math.min(out[j].t1,gA+.03);out[j+1].t0=Math.max(out[j+1].t0,gB)}}
+ for(let k=0;k<rs.length-1;k++){const gA=rs[k][1],gB=rs[k+1][0];for(let j=0;j<out.length-1;j++)if(out[j].ls<=gA+.001&&out[j+1].fs>=gB-.001){out[j].t1=Math.min(out[j].t1,gA+.03);out[j+1].t0=Math.max(out[j+1].t0,gB,out[j+1].fs-.14)}}
  out.forEach(q=>{q.t1=Math.max(q.t1,q.t0+.08)});
  if(out.some((q,j)=>!isFinite(q.t0)||!isFinite(q.t1)||q.t1<q.t0||(j&&q.t0<out[j-1].t0-1e-6)))return null;return out}
 function applyOff(){upl.words=upl.base.map(q=>({w:q.w,s:q.s,t0:q.t0+upl.off,t1:q.t1+upl.off}))}
