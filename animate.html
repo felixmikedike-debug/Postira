@@ -101,7 +101,7 @@ summary{cursor:pointer}
 /* ===== SELLER SETTINGS — edit these two lines to connect your own voice service =====
    If voiceServiceUrl is filled in, customers never see the Settings box. Leave it empty to let each customer enter their own. */
 window.TALKING_HOST={voiceServiceUrl:'',voiceServiceKey:'',
- apiBase:'https://postdira.onrender.com' /* your API address */,
+ apiBase:'https://posterky.onrender.com' /* your API address */,
  tokenKey:'' /* optional: the localStorage key your sign-in page saves the JWT under */,
  getToken:null /* optional: ()=>your JWT, if you don't use localStorage */,
  getFingerprint:null /* optional: async ()=>64-char hex, to share the device lock with your poster app */};
@@ -187,7 +187,7 @@ function draw(T,lv,word,wt,wd){
       const e=detectEmotion(w2,currentSentence||parts[0]||'');
       emo.type=e.type;emo.intensity=e.intensity;
       if(w2.length>3)gestTarget=.7+.3*e.intensity;
-      if(w2.length>4&&T-lastNod>1){nV+=.08+.03*e.intensity;lastNod=T}
+      
       ever=true;
       if(!reduce)for(let i=0;i<3;i++)particles.push({x:W*(.4+Math.random()*.3),y:H*.55,vx:(Math.random()-.5)*40,vy:-30-Math.random()*50,life:1,col:GC[Math.floor(Math.random()*GC.length)]});
     }else gestTarget=0;
@@ -210,7 +210,7 @@ function draw(T,lv,word,wt,wd){
   const D={};
   const ang=.014*nz(T,1)*A+.006*nz(T,5)+(D.ang||0);
   const hx=.008*nz(T,2.3)*A+(D.hx||0);
-  const hy=.005*nz(T,4.1)*A+nY+rest*.01+emo.settle*.008+(D.hy||0);
+  const hy=0;
   const handX=Math.sin(T*.9)*.010*act+emo.gest*.028,handY=-(.45+.55*Math.sin(T*.7+1))*.018*act-emo.gest*.015;
   if(glOK){
     gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,gl.mt);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,mc);gl.activeTexture(gl.TEXTURE0);
@@ -324,7 +324,7 @@ async function play(){if(busy)return;if(run){stop();return}
  AC();$('sp').hidden=true;run=true;showVideo();const g0=++gen;$('go').textContent='\u23F9 Stop';for(let i=0;i<parts.length&&g0==gen;i++)await speak(i,g0);if(g0==gen){await sleep(500);stop()}}
 /* ---------- live loop ---------- */
 function loop(){requestAnimationFrame(loop);if(busy||!img)return;const now=performance.now(),T=now/1000;let G=0,wd=.4;
- if(aud){let wdq=0;if(aud.words){const lt=AX.currentTime-aud.t0,qi=wordIdx(lt);if(qi!==aud.k){aud.k=qi;if(qi>=0){const q=aud.words[qi];cur=q.w;currentSentence=q.s;ws0=T-(lt-q.t0)}else cur=''}if(qi>=0){const q=aud.words[qi];wdq=Math.max(.12,q.t1-q.t0)}}else{const f=cl((AX.currentTime-aud.t0)/aud.dur),k=Math.max(0,aud.wc.findIndex(c=>c/aud.wc.at(-1)>=f));if(k!==aud.k){aud.k=k;setWord(aud.ws[k])}}
+ if(aud){let wdq=0;if(aud.words){const lt=AX.currentTime-aud.t0-Math.min(.25,AX.outputLatency||AX.baseLatency||0),qi=wordIdx(lt);if(qi!==aud.k){aud.k=qi;if(qi>=0){const q=aud.words[qi];cur=q.w;currentSentence=q.s;ws0=T-(lt-q.t0)}else cur=''}if(qi>=0){const q=aud.words[qi];wdq=Math.max(.12,q.t1-q.t0)}}else{const f=cl((AX.currentTime-aud.t0)/aud.dur),k=Math.max(0,aud.wc.findIndex(c=>c/aud.wc.at(-1)>=f));if(k!==aud.k){aud.k=k;setWord(aud.ws[k])}}
   const d=new Uint8Array(an.fftSize);an.getByteTimeDomainData(d);let q=0;for(const v of d)q+=((v-128)/128)**2;lvl=Math.max(cl(Math.sqrt(q/d.length)*5),lvl*.85);wd=aud.words?(wdq||.4):aud.dur*(aud.ws[aud.k].length+1)/aud.wc.at(-1);G=cl(lvl*3.2)}
  else lvl=0;
  draw(T,G,cur,T-ws0,wd)}
@@ -462,11 +462,11 @@ function placeGroup(rs,toks){
  const mt=new Array(K).fill(-1);{let k=K,p=P;while(k||p){const mv=B[k*M+p];if(mv===1){mt[k-1]=p-1;k--;p--}else if(mv===2)p--;else k--}}
  const ts=new Array(K);{let ia=-1,ta=gs-.08;for(let k=0;k<=K;k++){if(k<K&&mt[k]<0)continue;const tb=k<K?pk[mt[k]].t:ge+.08;for(let j=ia+1;j<k;j++)ts[j]=ta+(tb-ta)*(j-ia)/(k-ia);if(k<K)ts[k]=tb;ia=k;ta=tb}}
  const out=[];let si=0;
- toks.forEach((w,j)=>{const tc=ts[si];out.push({t0:j?valleyT(ts[si-1],tc):gs,t1:ge,fs:tc,ls:ts[si+sy[j]-1]});si+=sy[j]});
+ toks.forEach((w,j)=>{const tc=ts[si];out.push({t0:j?(v=>v+.3*(tc-v))(valleyT(ts[si-1],tc)):gs,t1:ge,fs:tc,ls:ts[si+sy[j]-1]});si+=sy[j]});
  for(let j=1;j<out.length;j++)out[j].t0=Math.max(out[j].t0,out[j-1].t0+.06);
  for(let j=out.length-1;j>=1;j--)out[j-1].t0=Math.min(out[j-1].t0,out[j].t0-.03);
  for(let j=0;j<out.length-1;j++)out[j].t1=out[j+1].t0;
- for(let k=0;k<rs.length-1;k++){const gA=rs[k][1],gB=rs[k+1][0];for(let j=0;j<out.length-1;j++)if(out[j].ls<=gA+.001&&out[j+1].fs>=gB-.001){out[j].t1=Math.min(out[j].t1,gA+.03);out[j+1].t0=Math.max(out[j+1].t0,gB-.05)}}
+ for(let k=0;k<rs.length-1;k++){const gA=rs[k][1],gB=rs[k+1][0];for(let j=0;j<out.length-1;j++)if(out[j].ls<=gA+.001&&out[j+1].fs>=gB-.001){out[j].t1=Math.min(out[j].t1,gA+.03);out[j+1].t0=Math.max(out[j+1].t0,gB)}}
  out.forEach(q=>{q.t1=Math.max(q.t1,q.t0+.08)});
  if(out.some((q,j)=>!isFinite(q.t0)||!isFinite(q.t1)||q.t1<q.t0||(j&&q.t0<out[j-1].t0-1e-6)))return null;return out}
 function applyOff(){upl.words=upl.base.map(q=>({w:q.w,s:q.s,t0:q.t0+upl.off,t1:q.t1+upl.off}))}
@@ -500,7 +500,7 @@ async function playU(){if(busy)return;if(run){stop();return}
  if(g0==gen){await sleep(500);stop()}}
 $('ub').onclick=()=>$('af').click();
 $('af').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;stop();
- try{AC();$('au').textContent='Reading '+f.name+'\u2026';const buf=await AX.decodeAudioData(await f.arrayBuffer()),a=analyze(buf);upl={buf,name:f.name,mono:a.mono,segs:a.segs,env:a.env,eh:a.eh,peaks:a.peaks,off:-.05,words:[],msg:''};align();$('sp').hidden=true}
+ try{AC();$('au').textContent='Reading '+f.name+'\u2026';const buf=await AX.decodeAudioData(await f.arrayBuffer()),a=analyze(buf);upl={buf,name:f.name,mono:a.mono,segs:a.segs,env:a.env,eh:a.eh,peaks:a.peaks,off:0,words:[],msg:''};align();$('sp').hidden=true}
  catch(err){upl=null;updUI();status('err','Couldn\u2019t read that audio','Try an mp3, wav or m4a file.')}};
 $('ux').onclick=()=>{stop();upl=null;nocap=false;updUI()};
 /* ---------- wiring ---------- */
