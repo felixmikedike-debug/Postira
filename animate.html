@@ -176,7 +176,34 @@ function detectEmotion(word,fullSent){
   return{type:'neutral',intensity:.45+Math.min(.3,w.length*.04)};
 }
 
-function draw(T,lv,word,wt,wd){
+/* ---- phrase captions in the bold host style: whole phrase on screen, current word highlighted ---- */
+const capCache=new WeakMap();
+function capChunks(ws){let c=capCache.get(ws);if(c)return c;c=[];let cu=null;
+ const rest=i=>{let k=0;for(let j=i;j<ws.length;j++){k++;if(/[.!?]["'\u201d\u2019)\]]*$/.test(ws[j].w))break}return k};
+ ws.forEach((q,i)=>{const p=ws[i-1];
+  if(cu){const L=cu.ch+1+q.w.length,big=(L>50||cu.n>=10)&&!(rest(i)<=2&&L<=64&&cu.n<14)&&!(/^(the|a|an|of|to|in|on|at|for|with|my|your|our|their|his|her|its|is|are|was|were|not|and|or|but|that|this|these|those)$/i.test(p.w)&&L<=60&&cu.n<12);
+   if(q.t0-p.t1>.3||big||/[.!?]["'\u201d\u2019)\]]*$/.test(p.w)||(cu.n>=5&&/[,;:\u2014]["'\u201d\u2019)\]]*$/.test(p.w))||(cu.n>=5&&/^(and|but|or|so|because|instead|while|which|when|where|although|though|then|if)$/i.test(q.w)))cu=null}
+  if(!cu){cu={a:i,b:i,s:q.t0,e:q.t1,ch:q.w.length,n:1};c.push(cu)}else{cu.b=i;cu.e=q.t1;cu.ch+=1+q.w.length;cu.n++}});
+ c.forEach((cu,k)=>{const nx=c[k+1],pv=c[k-1];cu.hold=Math.min(.4,nx?Math.max(0,nx.s-cu.e):.4);cu.fresh=!pv||pv.e+pv.hold<cu.s-.01});capCache.set(ws,c);return c}
+function capAt(lt,qi){if(!upl||!upl.words||!upl.words.length)return null;const ws=upl.words,c=capChunks(ws);let k=-1;for(let i=c.length-1;i>=0;i--)if(lt>=c[i].s){k=i;break}
+ if(k<0)return null;const ch=c[k],end=ch.e+ch.hold;if(lt>=end)return null;
+ /* a phrase that follows straight on from the last one swaps instantly; only a phrase after a real pause fades and pops in, and only before a pause does one fade out */
+ const age=lt-ch.s,rem=end-lt,ai=ch.fresh?Math.min(1,age/.12):1,ao=ch.hold>0?Math.min(1,rem/.15):1;
+ return{words:ws.slice(ch.a,ch.b+1).map((q,j)=>({w:q.w,i:ch.a+j})),act:qi>=ch.a&&qi<=ch.b?qi:-1,alpha:Math.max(0,Math.min(ai,ao)),pop:ch.fresh?.94+.06*Math.min(1,age/.14):1}}
+function drawCap(c){
+ const maxW=W*.84,F=s=>'700 '+s+'px Rubik,Arial,sans-serif';let fs=W*.062;
+ const wrap=()=>{x.font=F(fs);const sp=x.measureText(' ').width,L=[];let row=[],rw=0;
+  for(const q of c.words){const w=x.measureText(q.w).width;if(row.length&&rw+sp+w>maxW){L.push({row,rw});row=[];rw=0}row.push({q,w});rw+=(row.length>1?sp:0)+w}
+  if(row.length)L.push({row,rw});return{L,sp}};
+ let r;const fit=m=>{fs=W*.062;r=wrap();while(r.L.length>m&&fs>W*.03){fs*=.93;r=wrap()}};fit(2);if(fs<W*.05||r.L.length>2)fit(3);
+ const mw=Math.max(...r.L.map(l=>l.rw));if(mw>maxW){fs*=maxW/mw;r=wrap()}
+ const lh=fs*1.25,n=r.L.length,bh=n*lh+fs*.5,bw=Math.min(W*.96,Math.max(...r.L.map(l=>l.rw))+fs*.9),rad=fs*.35,bx=-bw/2,by=-bh/2;
+ x.save();x.translate(W/2,H*.8);x.scale(c.pop,c.pop);x.globalAlpha=c.alpha;x.shadowBlur=0;
+ x.fillStyle='rgba(0,0,0,.5)';x.beginPath();x.moveTo(bx+rad,by);x.arcTo(bx+bw,by,bx+bw,by+bh,rad);x.arcTo(bx+bw,by+bh,bx,by+bh,rad);x.arcTo(bx,by+bh,bx,by,rad);x.arcTo(bx,by,bx+bw,by,rad);x.closePath();x.fill();
+ x.font=F(fs);x.textAlign='left';x.textBaseline='middle';x.lineJoin='round';x.lineWidth=fs*.14;x.strokeStyle='rgba(0,0,0,.9)';x.fillStyle='#ffffff';
+ r.L.forEach((l,li)=>{let px=-l.rw/2;const py=by+fs*.25+lh*(li+.5);for(const o of l.row){x.strokeText(o.q.w,px,py);x.fillText(o.q.w,px,py);px+=o.w+r.sp}});
+ x.restore()}
+function draw(T,lv,word,wt,wd,cap){
   wd=wd||.4;const dt=cl(T-pT,0,.1),w2=word||'';pT=T;
   gS+=(cl(lv)-gS)*(1-Math.exp(-dt*(lv>gS?16:7)));const g=gS,gg=cl((gS-.05)/.3);
   act+=((w2||g>.15?1:0)-act)*(1-Math.exp(-dt*2.5));
@@ -237,7 +264,7 @@ function draw(T,lv,word,wt,wd){
     }
   }
   x.globalAlpha=1;
-  if(word&&!nocap){
+  if(cap&&!nocap)drawCap(cap);else if(word&&!nocap){
     const e=wt<0?1:Math.min(1,wt/.12),s=e<1?1+2.4*Math.pow(e-1,3)+1.3*Math.pow(e-1,2):1,sc=Math.max(.04,e<1?s*(.35+.65*e):1);
     let fs=Math.min(102,W*1.18/Math.max(4,word.length)*1.55);
     /* fit to screen: measure the real width (stroke + glow + pop overshoot) and shrink until it sits inside safe margins */
@@ -323,11 +350,11 @@ async function play(){if(busy)return;if(run){stop();return}
  if(!cfg().u){needSvc();return}
  AC();$('sp').hidden=true;run=true;showVideo();const g0=++gen;$('go').textContent='\u23F9 Stop';for(let i=0;i<parts.length&&g0==gen;i++)await speak(i,g0);if(g0==gen){await sleep(500);stop()}}
 /* ---------- live loop ---------- */
-function loop(){requestAnimationFrame(loop);if(busy||!img)return;const now=performance.now(),T=now/1000;let G=0,wd=.4;
- if(aud){let wdq=0;if(aud.words){const lt=AX.currentTime-aud.t0-Math.min(.25,AX.outputLatency||AX.baseLatency||0),qi=wordIdx(lt);if(qi!==aud.k){aud.k=qi;if(qi>=0){const q=aud.words[qi];cur=q.w;currentSentence=q.s;ws0=T-(lt-q.t0)}else cur=''}if(qi>=0){const q=aud.words[qi];wdq=Math.max(.12,q.t1-q.t0)}}else{const f=cl((AX.currentTime-aud.t0)/aud.dur),k=Math.max(0,aud.wc.findIndex(c=>c/aud.wc.at(-1)>=f));if(k!==aud.k){aud.k=k;setWord(aud.ws[k])}}
+function loop(){requestAnimationFrame(loop);if(busy||!img)return;const now=performance.now(),T=now/1000;let G=0,wd=.4,capO=null;
+ if(aud){let wdq=0;if(aud.words){const lt=AX.currentTime-aud.t0-Math.min(.25,AX.outputLatency||AX.baseLatency||0),qi=wordIdx(lt);capO=capAt(lt,qi);if(qi!==aud.k){aud.k=qi;if(qi>=0){const q=aud.words[qi];cur=q.w;currentSentence=q.s;ws0=T-(lt-q.t0)}else cur=''}if(qi>=0){const q=aud.words[qi];wdq=Math.max(.12,q.t1-q.t0)}}else{const f=cl((AX.currentTime-aud.t0)/aud.dur),k=Math.max(0,aud.wc.findIndex(c=>c/aud.wc.at(-1)>=f));if(k!==aud.k){aud.k=k;setWord(aud.ws[k])}}
   const d=new Uint8Array(an.fftSize);an.getByteTimeDomainData(d);let q=0;for(const v of d)q+=((v-128)/128)**2;lvl=Math.max(cl(Math.sqrt(q/d.length)*5),lvl*.85);wd=aud.words?(wdq||.4):aud.dur*(aud.ws[aud.k].length+1)/aud.wc.at(-1);G=cl(lvl*3.2)}
  else lvl=0;
- draw(T,G,cur,T-ws0,wd)}
+ draw(T,G,cur,T-ws0,wd,capO)}
 /* ---------- save as MP4 (needs a voice server for real audio) ---------- */
 function btns(d){$('go').disabled=$('rc').disabled=$('ub').disabled=d;$('cx').hidden=!d;document.querySelectorAll('#av button').forEach(b=>b.disabled=d);$('m1').disabled=$('m2').disabled=d}
 /* ===== account, limits, watermark and gated encoder (talks to your API) ===== */
@@ -410,9 +437,9 @@ async function save(){if(run||busy)return;parse();const U=mode==='audio'?upl:nul
   for(let o=0,k=0;o<len;o+=4096,k++){const n=Math.min(4096,len-o),d=new AudioData({format:'f32-planar',sampleRate:sr,numberOfFrames:n,numberOfChannels:1,timestamp:Math.round(o/sr*1e6),data:pcm.subarray(o,o+n)});ae.encode(d);d.close();if(k%40==0)await sleep(0)}
   const nf=Math.ceil(tot*FPS);let lv=0;
   for(let f=0;f<nf;f++){if(stopF)throw new Error('Cancelled');const tt=f/FPS;let i=0;while(i+1<parts.length&&tt>=t0[i+1])i++;currentSentence=parts[i]||'';const lt=tt-t0[i],B=bufs[i],ws=(parts[i]||'').split(' '),wc=wcOf(ws);
-   let w='',wt=0,wdU=0;if(U){const qi=wordIdx(lt);if(qi>=0){const q=U.words[qi];w=q.w;wt=lt-q.t0;wdU=Math.max(.12,q.t1-q.t0);currentSentence=q.s}}else if(lt>=0&&lt<B.duration){const k=Math.max(0,wc.findIndex(c=>c/wc.at(-1)>=lt/B.duration));w=ws[k];wt=lt-B.duration*(k?wc[k-1]/wc.at(-1):0)}
+   let w='',wt=0,wdU=0,capO=null;if(U){const qi=wordIdx(lt);capO=capAt(lt,qi);if(qi>=0){const q=U.words[qi];w=q.w;wt=lt-q.t0;wdU=Math.max(.12,q.t1-q.t0);currentSentence=q.s}}else if(lt>=0&&lt<B.duration){const k=Math.max(0,wc.findIndex(c=>c/wc.at(-1)>=lt/B.duration));w=ws[k];wt=lt-B.duration*(k?wc[k-1]/wc.at(-1):0)}
    let q=0,c=0;if(w){const o=Math.floor(tt*sr);for(let k=o;k<o+Math.floor(sr/FPS)&&k<len;k++){q+=pcm[k]*pcm[k];c++}}
-   lv=Math.max(cl(Math.sqrt(q/(c||1))*5),lv*.85);const wd=U?(wdU||.4):(w?B.duration*(w.length+1)/wc.at(-1):.4);draw(tt,w?cl(lv*3.2):0,w,wt,wd);
+   lv=Math.max(cl(Math.sqrt(q/(c||1))*5),lv*.85);const wd=U?(wdU||.4):(w?B.duration*(w.length+1)/wc.at(-1):.4);draw(tt,w?cl(lv*3.2):0,w,wt,wd,capO);
    const fr=new VideoFrame(cv,{timestamp:Math.round(f*1e6/FPS),duration:Math.round(1e6/FPS)});ve.encode(fr,{keyFrame:f%60==0});fr.close();
    if(f%6==0){status('work','Step 2 of 3 \u00b7 Rendering video','Frame '+f+' of '+nf+'. Keep this tab open.',f/nf*100);await sleep(0);while(ve.encodeQueueSize>20)await sleep(5)}}
   status('work','Step 3 of 3 \u00b7 Finishing MP4','Packing picture and voice into one file\u2026',null);await ve.flush();await ae.flush();mux.finalize();
