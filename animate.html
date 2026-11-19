@@ -55,13 +55,15 @@ summary{cursor:pointer}
 .upm-b:disabled{opacity:.65;cursor:not-allowed}
 .upm-x:focus-visible,.upm-b:focus-visible{outline:3px solid var(--ac);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.upo,.upm{transition:none}}
+.plan{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 10px;border-radius:999px;background:rgba(127,127,127,.2);color:var(--mut)}
+.plan.pro{background:linear-gradient(135deg,#f27d0c,#d9480f);color:#fff}
 </style>
 </head>
 <body>
 <header class="hd"><h1>Make a talking presenter video</h1><p>Pick a presenter, add a voice, then download a ready-to-post video. No editing skills needed.</p></header>
 <section class="pn" id="ac" aria-label="Your account">
 <div id="ac_out"><b>Sign in to download your video</b><small><a class="lk" href="index.html">Sign in or create an account</a>, then come back to this page.</small></div>
-<div id="ac_in" hidden><div class="r" style="margin-top:0"><b id="ac_who"></b></div>
+<div id="ac_in" hidden><div class="r" style="margin-top:0;align-items:center"><b id="ac_who"></b><span class="plan" id="ac_plan" hidden></span></div>
 <small id="ac_q"></small><div class="r"><button class="a" id="ac_sub" type="button" hidden>Go unlimited</button></div></div>
 <small id="ac_x" role="alert"></small>
 </section>
@@ -101,7 +103,7 @@ summary{cursor:pointer}
 /* ===== SELLER SETTINGS — edit these two lines to connect your own voice service =====
    If voiceServiceUrl is filled in, customers never see the Settings box. Leave it empty to let each customer enter their own. */
 window.TALKING_HOST={voiceServiceUrl:'',voiceServiceKey:'',
- apiBase:'https://posterky.onrender.com' /* your API address */,
+ apiBase:'https://postdira.onrender.com' /* your API address */,
  tokenKey:'' /* optional: the localStorage key your sign-in page saves the JWT under */,
  getToken:null /* optional: ()=>your JWT, if you don't use localStorage */,
  getFingerprint:null /* optional: async ()=>64-char hex, to share the device lock with your poster app */};
@@ -359,10 +361,10 @@ function loop(){requestAnimationFrame(loop);if(busy||!img)return;const now=perfo
 function btns(d){$('go').disabled=$('rc').disabled=$('ub').disabled=d;$('cx').hidden=!d;document.querySelectorAll('#av button').forEach(b=>b.disabled=d);$('m1').disabled=$('m2').disabled=d}
 /* ===== account, limits, watermark and gated encoder (talks to your API) ===== */
 const TH=window.TALKING_HOST||{},API=(TH.apiBase||'').replace(/\/+$/,''),FREE0=['sam','omar','zuri'];
-let ST=null,WM=true,WMT='Made with Postira',WMI='',FP=null,gating=false;
+let ST=null,STERR=false,WM=true,WMT='Made with Postira',WMI='',FP=null,gating=false;
 const TKEYS=[TH.tokenKey,'token','authToken','auth_token','jwt','accessToken','access_token','th_jwt'].filter(Boolean);
 const tok=()=>{try{if(TH.getToken){const v=TH.getToken();if(v)return v}for(const k of TKEYS){const v=localStorage.getItem(k);if(v&&v.split('.').length===3)return v}}catch(e){}return''};
-const pwm=()=>!(ST&&ST.subscribed),freeList=()=>(ST&&ST.freeAvatars)||FREE0,locked=i=>pwm()&&!freeList().includes(AV[i].n.toLowerCase());
+const pwm=()=>!(ST&&ST.subscribed),freeList=()=>(ST&&ST.freeAvatars)||FREE0,planKnown=()=>!tok()||!!ST||STERR,locked=i=>planKnown()&&pwm()&&!freeList().includes(AV[i].n.toLowerCase());
 async function fp(){if(FP)return FP;try{
  if(typeof TH.getFingerprint==='function'){const v=await TH.getFingerprint();if(/^[a-f0-9]{64}$/.test(v))return FP=v}
  let cs='',gr='';try{const c=document.createElement('canvas');c.width=220;c.height=40;const g=c.getContext('2d');g.textBaseline='top';g.font='16px Arial';g.fillStyle='#f60';g.fillRect(10,2,90,20);g.fillStyle='#069';g.fillText('th-fp \u2603 Cwm fjord',4,12);cs=c.toDataURL()}catch(e){}
@@ -374,14 +376,16 @@ async function api(p,o){o=o||{};const h={'Content-Type':'application/json'},t=to
 const acctMsg=t=>{$('ac_x').textContent=t;$('ac').scrollIntoView({behavior:reduce?'auto':'smooth',block:'center'})};
 function signOut(){ST=null;if(!busy)WM=true;renderAcct();lockAvatars()}
 async function refreshStatus(){
+ STERR=false;
  if(!tok()){ST=null}else try{const r=await api('/api/video/status'),j=await r.json().catch(()=>({}));
-  if(r.ok){ST=j;WMT=j.watermarkText||WMT;WMI=j.tag||''}else if(r.status===401||(r.status===403&&!j.code)){signOut();return}}catch(e){}
+  if(r.ok){ST=j;WMT=j.watermarkText||WMT;WMI=j.tag||''}else if(r.status===401||(r.status===403&&!j.code)){signOut();return}else STERR=true}catch(e){STERR=true}
  if(!busy)WM=pwm();renderAcct();lockAvatars()}
 function renderAcct(){const si=!!tok();$('ac_out').hidden=si;$('ac_in').hidden=!si;
  const q=$('ql'),hd=q.querySelector('option[value="1080"]');if(hd){hd.disabled=pwm();hd.textContent=pwm()?'High quality (HD) · unlimited plan only':'High quality (HD) · larger file';if(pwm())q.value='684'}
- if(!si)return;$('ac_who').textContent=ST?'Hi, '+(ST.name||'there'):'Signed in';let t='';
- if(ST){if(ST.subscribed)t='Unlimited plan · every presenter · HD · no watermark';else if(ST.deviceBlocked)t='This device is already used by another free account.';
-  else t='Free plan · '+ST.cleanLeft+' clean + '+ST.watermarkedLeft+' watermarked downloads left today · '+freeList().length+' presenters'}
+ if(!si)return;$('ac_who').textContent=ST?'Hi, '+(ST.name||'there'):'Signed in';let t='';const pl=$('ac_plan');pl.hidden=!ST;if(ST){pl.className='plan '+(ST.subscribed?'pro':'free');pl.textContent=ST.subscribed?'Unlimited':'Free'}
+ if(!ST)t=STERR?'We couldn’t check your plan, so free limits apply for now.':'Checking your plan…';
+ if(ST){if(ST.subscribed)t='Every presenter · HD · no watermark'+(ST.endDate?' · until '+new Date(ST.endDate).toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'}):'');else if(ST.deviceBlocked)t='This device is already used by another free account.';
+  else t=ST.cleanLeft+' clean + '+ST.watermarkedLeft+' watermarked downloads left today · '+freeList().length+' presenters'}
  $('ac_q').textContent=t;$('ac_sub').hidden=!ST||ST.subscribed}
 function lockAvatars(){document.querySelectorAll('#av button').forEach((b,i)=>{const l=locked(i);if(l)b.dataset.l='1';else delete b.dataset.l;
  b.title=AV[i].n+(l?' · unlimited plan':'');b.setAttribute('aria-label','Presenter: '+AV[i].n+(l?' (unlimited plan only)':''))});
